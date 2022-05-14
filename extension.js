@@ -62,7 +62,7 @@ const loadScript = path => {
 	}
 };
 
-function getParamNames(func) {
+const getParamNames = func => {
 	var STRIP_COMMENTS = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg,
 		ARGUMENT_NAMES = /([^\s,]+)/g,
 		fnStr = func.toString().replace(STRIP_COMMENTS, ''),
@@ -70,6 +70,13 @@ function getParamNames(func) {
 	if(result === null)
 		result = [];
 	return result;
+}
+
+const strToRegex = inputstring => {
+    var match = inputstring.match(/^\/(.*?)\/([gimy]*)$/);
+    if (match)
+        return regex = new RegExp(match[1], match[2]);
+	return null;
 }
 
 const executeScript = module => {
@@ -87,7 +94,10 @@ const executeScript = module => {
 						placeHolder: module.regexp
 					})
 					.then(val => {
-						run(new RegExp(eval(val)));
+						var input = strToRegex(val);
+						if (input)
+							run(input);
+						else throw "Input is not a regular expression.";
 					});
 			} else {
 				run(module.regexp);
@@ -99,8 +109,6 @@ const executeScript = module => {
 	  }
 }
 const promptParamsAndRunCB = (params, cb, values = [...params])=>{
-	console.log("oui");
-	console.log(params);
 	if (params.length == 0){
 		cb(values);
 		return;
@@ -111,7 +119,6 @@ const promptParamsAndRunCB = (params, cb, values = [...params])=>{
 		})
 		.then(val => {
 			values[values.length - params.length - 1] = val;
-			console.log(params);
 			promptParamsAndRunCB(params, cb, values);
 		});
 }
