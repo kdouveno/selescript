@@ -1,9 +1,11 @@
 // The module 'vscode' contains the VS Code extensibility API
 // Import the module and reference it with the alias vscode in your code below
 const fs = require('fs');
-const path = require('path');
+const { homedir } = require('os');
+const { sep, dirname } = require('path');
 const vscode = require('vscode');
 
+const getScriptDir = () => homedir() + `${sep}.scriptbox${sep}`;
 
 const SCRIPT_TEMPLATE = `
 module.exports = function (selection) {
@@ -30,19 +32,6 @@ const openScriptForEditing = scriptPath => {
 	  }
 	);
   };
-function getScriptsDir(context){
-	return context.globalStorageUri.path + "/scripts/";
-}
-
-function ensureDirectoryExistence(filePath) {
-	var dirname = path.dirname(filePath);
-	console.log(dirname);
-	if (fs.existsSync(dirname)) {
-	  return true;
-	}
-	ensureDirectoryExistence(dirname);
-	fs.mkdirSync(dirname);
-}
 
 const enumerateScripts = dir =>
   new Promise((resolve, reject) =>
@@ -54,6 +43,7 @@ const enumerateScripts = dir =>
       } else {
         resolve(files);
       }
+
     })
 );
 const createQuickPickItemsForScripts = (scripts) =>
@@ -76,47 +66,103 @@ const executeScript = module => {
 	const editor = vscode.window.activeTextEditor;
 
 	editor.edit(builder=>{
-		const context = {
-			vscode: vscode,
-			selections: getCurrentTextSelections(editor, builder)
-		};
-		module.apply(context);
+		module.script.apply(vscode, [getCurrentTextSelections(editor, builder, module.regexp)]);
 	});
   
 }
 
-const getCurrentTextSelections = (editor, builder) => {
-  
+const regMatches = (reg, str)=>{
+	var out = [];
+	var res;
+	while((res = reg.exec(str)) !== null){
+		out.push(
+			{
+				match: res.shift(),
+				captures: [...res],
+				index: res.index
+			}
+		)
+	}
+	return out;
+}
+
+const getCurrentTextSelections = (editor, builder, regexp) => {
 	if (!editor) {
 	  return;
 	}
   
-	const selections = editor.selections;
-	if (selections.length === 1 && selections[0].isEmpty) {
-	  return editor.document.getText();
+	selections = editor.selections;
+	if (selections.length === 0 || selections.length === 1 && selections[0].isEmpty) {
+		var doc = editor.document.getText(),
+			startPos = editor.document.positionAt(0),
+			endPos = editor.document.positionAt(doc.length - 1);
+	  selections = [new vscode.Selection(startPos, endPos)];
 	}
-	var i = 0, ii = -1, lastLine;
+	var i = 0,
+		ii = -1,
+		lastLine;
 	return selections.map(s=>{
-		var start = s.start;
+		var start = s.start,
+			end = s.end,
+			text = editor.document.getText(s),
+			regRes;
+
 		start = {line: start.line, char: start.character};
-		var end = s.end;
 		end = {line: end.line, char: end.character};
 		if (lastLine !== start.line)
 			ii++;
 		lastLine = start.line;
+		console.log(regexp);
+
+		if (regexp){
+			console.log(regexp);
+
+			var startIndex = editor.document.offsetAt(s.start),
+				mi = 0,
+				mii = -1,
+				mLastLine;
+			regRes = regMatches(regexp, text).map(o => {
+				var mStart = editor.document.positionAt(startIndex + o.index), 
+					mEnd = editor.document.positionAt(startIndex + o.index + o.match.length - 1);
+				var sel = new vscode.Selection(mStart, mEnd);
+				mStart = {line: mStart.line, char: mStart.character};
+				mEnd = {line: mEnd.line, char: mEnd.character};
+				if (mLastLine !== mStart.line)
+					mii++;
+				mLastLine = mStart.line;
+
+				return {
+					text: o.match,
+					captures: o.captures,
+					start: mStart,
+					end: mEnd,
+					isEmpty: sel.isEmpty,
+					isReversed: sel.isReversed,
+					index: mi++,
+					lineIndex: mii,
+					replace: text=>{builder.replace(sel, text)}
+				};
+			})
+		}
 		return {
-			text: editor.document.getText(s),
+			text: text,
 			start: start,
 			end: end,
 			isEmpty: s.isEmpty,
 			isReversed: s.isReversed,
 			index: i++,
 			lineIndex: ii,
+			matches: regRes,
 			replace: text=>{builder.replace(s, text)}
 		};
 	});
 	// return editor.document.getText(selection);
 };
+
+function writeFile(path, contents) {
+	
+	fs.writeFileSync(path, contents, cb);
+}
 
 /**
  * @param {vscode.ExtensionContext} context
@@ -126,9 +172,9 @@ function activate(context) {
 	// Use the console to output diagnostic information (console.log) and errors (console.error)
 	// This line of code will only be executed once when your extension is activated
 	console.log('Congratulations, your extension "selescript" is now active!');
-	const scriptsDir = getScriptsDir(context);
+	const scriptsDir = getScriptDir(context);
+	fs.mkdirSync(scriptsDir, { recursive: true});
 
-	ensureDirectoryExistence(scriptsDir+"kamoule");
 
 	// The command has been defined in the package.json file
 	// Now provide the implementation of the command with  registerCommand
@@ -140,6 +186,7 @@ function activate(context) {
 		// Display a message box to the user
 		vscode.window.showInformationMessage('Hello World from SeleScript! ');
 	}));
+	
 	context.subscriptions.push(
 		vscode.commands.registerCommand("selescript.createScript", async () => {
 		  try {
@@ -150,8 +197,7 @@ function activate(context) {
 			  .then(scriptName => {
 				const newScriptPath = scriptsDir + scriptName + ".js";
 				
-				fs.writeFileSync (newScriptPath, SCRIPT_TEMPLATE, "UTF-8");
-	
+				fs.writeFileSync(newScriptPath, SCRIPT_TEMPLATE, "UTF-8");
 				openScriptForEditing(newScriptPath);
 			  });
 		  } catch (err) {
@@ -166,7 +212,6 @@ function activate(context) {
 			const scripts = await enumerateScripts(scriptsDir);
 	
 			const scriptItems = createQuickPickItemsForScripts(scripts);
-			console.log(scriptItems);
 			const pickedScript = await vscode.window.showQuickPick(scriptItems);
 	
 			if (pickedScript) {
