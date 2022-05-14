@@ -62,13 +62,58 @@ const loadScript = path => {
 	}
 };
 
+function getParamNames(func) {
+	var STRIP_COMMENTS = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg,
+		ARGUMENT_NAMES = /([^\s,]+)/g,
+		fnStr = func.toString().replace(STRIP_COMMENTS, ''),
+		result = fnStr.slice(fnStr.indexOf('(')+1, fnStr.indexOf(')')).match(ARGUMENT_NAMES);
+	if(result === null)
+		result = [];
+	return result;
+}
+
 const executeScript = module => {
 	const editor = vscode.window.activeTextEditor;
-
-	editor.edit(builder=>{
-		module.script.apply(vscode, [getCurrentTextSelections(editor, builder, module.regexp)]);
-	});
-  
+	var params = getParamNames(module.script);
+	params.shift();
+	try {
+		promptParamsAndRunCB(params, (values)=>{
+			var run = reg => editor.edit(builder=>{
+				module.script.apply(vscode, [getCurrentTextSelections(editor, builder, reg), ...values]);
+			});
+			if (typeof(module.regexp) === "string"){
+				vscode.window
+					.showInputBox({
+						placeHolder: module.regexp
+					})
+					.then(val => {
+						run(new RegExp(eval(val)));
+					});
+			} else {
+				run(module.regexp);
+			}
+			
+		});
+	  } catch (err) {
+		vscode.window.showErrorMessage(err.message);
+	  }
+}
+const promptParamsAndRunCB = (params, cb, values = [...params])=>{
+	console.log("oui");
+	console.log(params);
+	if (params.length == 0){
+		cb(values);
+		return;
+	}
+	vscode.window
+		.showInputBox({
+			placeHolder: params.shift()
+		})
+		.then(val => {
+			values[values.length - params.length - 1] = val;
+			console.log(params);
+			promptParamsAndRunCB(params, cb, values);
+		});
 }
 
 const regMatches = (reg, str)=>{
