@@ -86,7 +86,22 @@ const executeScript = module => {
 	try {
 		promptParamsAndRunCB(params, (values)=>{
 			var run = reg => editor.edit(builder=>{
-				module.script.apply(vscode, [getCurrentTextSelections(editor, builder, reg), ...values]);
+				var sels = getCurrentTextSelections(editor, builder, reg);
+				module.script.apply(vscode, [sels, ...values]);
+				if (reg)
+				{
+					var selections = [];
+					sels.forEach((s) => {
+						var newSels = s.matches.filter(m=>m.select).map(m=>m.vsSel);
+					console.log(newSels);
+
+						if (newSels.length !== 0)
+							selections.push(...newSels);
+						else selections.push(s.vsSel);
+					});
+					editor.selections = selections;
+				}
+				
 			});
 			if (typeof(module.regexp) === "string"){
 				vscode.window
@@ -138,6 +153,34 @@ const regMatches = (reg, str)=>{
 	return out;
 }
 
+const getSelectionRegexpMatches = (editor, builder, selection, regexp)=>{
+	if (regexp){
+		var startIndex = editor.document.offsetAt(selection.start),
+			mi = 0,
+			mii = -1,
+			mLastLine;
+		return regMatches(regexp, editor.document.getText(selection)).map(o => {
+			var mStart = editor.document.positionAt(startIndex + o.index),
+				mEnd = editor.document.positionAt(startIndex + o.index + o.match.length);
+			var sel = new vscode.Selection(mStart, mEnd);
+			if (mLastLine !== mStart.line)
+				mii++;
+			mLastLine = mStart.line;
+
+			return {
+				text: o.match,
+				captures: o.captures,
+				vsSel: sel,
+				index: mi++,
+				lineIndex: mii,
+				sel(){this.select = true},
+				replace: text=>{builder.replace(sel, text)}
+			};
+		})
+	}
+	return null;
+}
+
 const getCurrentTextSelections = (editor, builder, regexp) => {
 	if (!editor) {
 	  return;
@@ -147,61 +190,21 @@ const getCurrentTextSelections = (editor, builder, regexp) => {
 	if (selections.length === 0 || selections.length === 1 && selections[0].isEmpty) {
 		var doc = editor.document.getText(),
 			startPos = editor.document.positionAt(0),
-			endPos = editor.document.positionAt(doc.length - 1);
+			endPos = editor.document.positionAt(doc.length);
 	  selections = [new vscode.Selection(startPos, endPos)];
 	}
 	var i = 0,
 		ii = -1,
 		lastLine;
-	return selections.map(s=>{
-		var start = s.start,
-			end = s.end,
-			text = editor.document.getText(s),
-			regRes;
-
-		start = {line: start.line, char: start.character};
-		end = {line: end.line, char: end.character};
-		if (lastLine !== start.line)
+	return selections.map((s)=>{
+		var regRes = getSelectionRegexpMatches(editor, builder, s, regexp);
+		if (lastLine !== s.start.line)
 			ii++;
-		lastLine = start.line;
-		console.log(regexp);
+		lastLine = s.start.line;
 
-		if (regexp){
-			console.log(regexp);
-
-			var startIndex = editor.document.offsetAt(s.start),
-				mi = 0,
-				mii = -1,
-				mLastLine;
-			regRes = regMatches(regexp, text).map(o => {
-				var mStart = editor.document.positionAt(startIndex + o.index), 
-					mEnd = editor.document.positionAt(startIndex + o.index + o.match.length - 1);
-				var sel = new vscode.Selection(mStart, mEnd);
-				mStart = {line: mStart.line, char: mStart.character};
-				mEnd = {line: mEnd.line, char: mEnd.character};
-				if (mLastLine !== mStart.line)
-					mii++;
-				mLastLine = mStart.line;
-
-				return {
-					text: o.match,
-					captures: o.captures,
-					start: mStart,
-					end: mEnd,
-					isEmpty: sel.isEmpty,
-					isReversed: sel.isReversed,
-					index: mi++,
-					lineIndex: mii,
-					replace: text=>{builder.replace(sel, text)}
-				};
-			})
-		}
 		return {
-			text: text,
-			start: start,
-			end: end,
-			isEmpty: s.isEmpty,
-			isReversed: s.isReversed,
+			text: editor.document.getText(s),
+			vsSel: s,
 			index: i++,
 			lineIndex: ii,
 			matches: regRes,
@@ -210,11 +213,6 @@ const getCurrentTextSelections = (editor, builder, regexp) => {
 	});
 	// return editor.document.getText(selection);
 };
-
-function writeFile(path, contents) {
-	
-	fs.writeFileSync(path, contents, cb);
-}
 
 /**
  * @param {vscode.ExtensionContext} context

@@ -17,23 +17,23 @@
 		"commands": [
 			{
 				"command": "selescript.helloWorld",
-				"title": "Hello World"
+				"title": "Selescript: Enable"
 			},
 			{
 				"command": "selescript.createScript",
-				"title": "create SeleScript"
+				"title": "Selescript: Create"
 			},
 			{
 				"command": "selescript.editScript",
-				"title": "edit SeleScript"
+				"title": "Selescript: Edit"
 			},
 			{
 				"command": "selescript.runScript",
-				"title": "run SeleScript"
+				"title": "Selescript: Run"
 			},
 			{
 				"command": "selescript.test",
-				"title": "to log some shit"
+				"title": "Selescript: Test"
 			}
 		]
 	},
@@ -52,5 +52,9 @@
 		"mocha": "^9.2.2",
 		"typescript": "^4.6.4",
 		"@vscode/test-electron": "^2.1.3"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/kdouveno/selescript"
 	}
 }
