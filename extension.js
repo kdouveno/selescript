@@ -97,7 +97,7 @@ const executeScript = module => {
 
 						if (newSels.length !== 0)
 							selections.push(...newSels);
-						else selections.push(s.vsSel);
+						else if (s.keep) selections.push(s.vsSel);
 					});
 					editor.selections = selections;
 				}
@@ -208,7 +208,8 @@ const getCurrentTextSelections = (editor, builder, regexp) => {
 			index: i++,
 			lineIndex: ii,
 			matches: regRes,
-			replace: text=>{builder.replace(s, text)}
+			replace: text=>{builder.replace(s, text)},
+			keepSel(){this.keep = true}
 		};
 	});
 	// return editor.document.getText(selection);
