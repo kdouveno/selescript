@@ -8,12 +8,24 @@ const vscode = require('vscode');
 const getScriptDir = () => homedir() + `${sep}.scriptbox${sep}`;
 
 const SCRIPT_TEMPLATE = `
-module.exports = function (selection) {
-  // selection is a string containing:
-  // 1. the current text selection
-  // 2. the entire contents of the active editor when nothing is selected
-  return selection;
-};
+module.exports = {
+	/**
+	 * 
+	 * @param sels is an array of selection objects, each selection posess a built-in function replace() that replaces the selection with the first param.
+	 * along with other useful data, like end and start position, line at start, index of the selection (wether its the first or n-th selection).
+	 * if 'regexp' is defined and valid, then each sels get its own selection array 'matches' of the matches to 'regexp', along with their group captures.
+	 * Any additionnal params to this function is a string promped to the user before executing the script.
+	 */
+	script(sels) {
+		
+	},
+	/**
+	 *	A RegExp: the regular expression to use on selections
+	 *	A string: asks for a regexp input before running script in an input box with this string as placeholder.
+	 *		the input must then be a literal regular expression like this: /example/gm
+	 */
+	regexp: "/Custom RegExp/tags"
+}
 `.trim();
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
@@ -87,13 +99,21 @@ const executeScript = module => {
 		promptParamsAndRunCB(params, (values)=>{
 			var run = reg => editor.edit(builder=>{
 				var sels = getCurrentTextSelections(editor, builder, reg);
-				module.script.apply(vscode, [sels, ...values]);
+				const outputChannel = vscode.window.createOutputChannel("selescript");
+				sels.log = (toDebug)=>{
+					vscode.window.showInformationMessage("Debug : \n" + toDebug);
+				}
+				try {
+					module.script.apply(vscode, [sels, ...values]);
+				} catch (err) {
+					console.log();
+					vscode.window.showErrorMessage(err.messager + "\n" + err.stack);
+				}
 				if (reg)
 				{
 					var selections = [];
 					sels.forEach((s) => {
 						var newSels = s.matches.filter(m=>m.select).map(m=>m.vsSel);
-					console.log(newSels);
 
 						if (newSels.length !== 0)
 							selections.push(...newSels);
